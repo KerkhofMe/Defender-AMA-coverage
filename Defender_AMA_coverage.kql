@@ -39,7 +39,9 @@ DeviceInfo
 | extend
     OSPlatform = tostring(OSPlatform),
     MDEStatus = tostring(OnboardingStatus),
+    HeartbeatSeen = iff(isnotempty(LastAMASeen), "Yes", "No"),
     HasAMA = iff(isnotempty(LastAMASeen), "Yes", "No"),
+    AMAStatus = iff(isnotempty(LastAMASeen), "Heartbeat seen", "No AMA or No Heartbeat"),
     SendsSecurityLogs = iff(isnotempty(LastSecurityEvent), "Yes", "No"),
     SendsSyslogLogs = iff(isnotempty(LastSyslogEvent), "Yes", "No"),
     LastEvent = coalesce(LastSecurityEvent, LastSyslogEvent),
@@ -48,7 +50,9 @@ DeviceInfo
     DeviceName = tostring(split(DeviceName, ".")[0]),
     OSPlatform,
     MDEStatus,
+    HeartbeatSeen,
     HasAMA,
+    AMAStatus,
     LastAMASeen,
     SendsSecurityLogs,
     SendsSyslogLogs,
@@ -104,7 +108,9 @@ DeviceInfo
     DeviceName = Computer,
     OSPlatform = coalesce(OSName, OSType, Category, "Unknown"),
     MDEStatus = iff(isnotempty(DefenderStatus), tostring(DefenderStatus), "Not in MDE"),
+    HeartbeatSeen = "Yes",
     HasAMA = "Yes",
+    AMAStatus = "Heartbeat seen",
     SendsSecurityLogs = iff(isnotempty(LastSecurityEvent), "Yes", "No"),
     SendsSyslogLogs = iff(isnotempty(LastSyslogEvent), "Yes", "No"),
     LastEvent = coalesce(LastSecurityEvent, LastSyslogEvent),
@@ -113,7 +119,9 @@ DeviceInfo
 DeviceName = tostring(split(DeviceName, ".")[0]),
 OSPlatform,
 MDEStatus,
+HeartbeatSeen,
 HasAMA,
+AMAStatus,
 LastAMASeen,
 SendsSecurityLogs,
 SendsSyslogLogs,
@@ -121,9 +129,12 @@ LastEvent,
 Source
 )
 // Classification with MDE, AMA or both
+// NOTE: "AMA" presence here is inferred from Heartbeat in the selected time window.
+// A device with no heartbeat (e.g. powered off, network blocked, AMA stopped) will
+// be classified as "MDE Only (no AMA heartbeat)" even if the AMA extension is actually installed.
 | extend StatusCategory = case(
 Source == "Defender Device" and MDEStatus == "Onboarded" and HasAMA == "Yes", "MDE + AMA",
-Source == "Defender Device" and MDEStatus == "Onboarded" and HasAMA == "No", "MDE Only",
+Source == "Defender Device" and MDEStatus == "Onboarded" and HasAMA == "No", "MDE Only (no AMA heartbeat)",
 Source == "Defender Device" and MDEStatus != "Onboarded", strcat("MDE ", MDEStatus),
 Source == "AMA Only", "AMA Only",
 "Unknown"
