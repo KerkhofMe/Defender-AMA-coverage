@@ -4,7 +4,14 @@
 
 #### ⚠️ This workbook assumes Microsoft Defender XDR data is ingested into Sentinel. Without ingestion, device name normalization and correlation may be inconsistent. To workaround that, copy the KQL query from the Github page and run it in Advanced Hunting in the Defender Portal (https://security.microsoft.com). 
 
-When running the KQL query it does not take into account the actual state of the AMA extension which is part of the Workbook merged view. The reason for this is that the query looks at the Heartbeat table and the actual extention status lookup is a Graph API call. This means that the extention might be installed but not reporting, for example, the machine is turned off and therefor not sending heartbeats to the Heartbeat table.
+When running the KQL query, the **AMA presence** in the first table is inferred from the `Heartbeat` table within the selected time window — not from the actual extension state. The reason is that the real installation state is only available via an Azure Resource Graph (ARG) call. As a result, a device may show as `No AMA or No Heartbeat` / `MDE Only (no AMA heartbeat)` even when the AMA extension is installed but not reporting (for example: VM powered off, network blocked, AMA service stopped, or no DCR associated).
+
+To make this explicit, the query and workbook expose two separate columns:
+
+- `HeartbeatSeen` — `Yes` / `No`, based purely on the `Heartbeat` table
+- `AMAStatus` — `Heartbeat seen` or `No AMA or No Heartbeat`
+
+The **merged view** at the bottom of the workbook (`Merge - MDEvsAMA + DCR`) cross-checks this with `hasAMAExt` / `amaExtVersion` from Azure Resource Graph and is the authoritative source for whether the AMA extension is actually installed.
 
 ## Overview
 
@@ -23,15 +30,17 @@ By correlating data from **DeviceInfo**, **Heartbeat**, and **SecurityEvent/Sysl
 
 *   **Coverage Analysis**
     Detect devices that:
-    *   Are onboarded to MDE but missing AMA
+    *   Are onboarded to MDE but missing an AMA heartbeat (potentially missing AMA, or installed but not reporting)
     *   Are not sending SecurityEvent/Syslog logs despite being onboarded
+
+    > **Note:** AMA presence in the first table is determined by the `Heartbeat` table only. See the [Important Notes](#important-notes) section for how to interpret `No AMA or No Heartbeat`.
 
 *   **Filtering Options**
     Filter by:
     *   Workspace
     *   Time range (default: 7 days)
     *   OS platform
-    *   AMA status (All, Yes, No)
+    *   AMA status (All, Yes, No) — based on whether an AMA heartbeat was seen in the time window
     *   Exclude Workstations (default: Yes)
     *   Exclude Compliant Machines
 
@@ -41,7 +50,7 @@ By correlating data from **DeviceInfo**, **Heartbeat**, and **SecurityEvent/Sysl
 *   **Detailed Breakdown**
     Categorizes devices as:
     *   **MDE + AMA**
-    *   **MDE Only**
+    *   **MDE Only (no AMA heartbeat)**
     *   **AMA Only**
 
 *   **DCR Association**
@@ -53,6 +62,15 @@ By correlating data from **DeviceInfo**, **Heartbeat**, and **SecurityEvent/Sysl
 ***
 
 ## Important Notes
+
+*   **AMA presence is heartbeat-based in the first table**
+    The first table and the executive-summary tiles classify AMA presence using the `Heartbeat` table. A `No` / `No AMA or No Heartbeat` result does **not** prove that the AMA extension is uninstalled — it only means no heartbeat was received in the selected time window. Common causes for a missing heartbeat while the extension is installed:
+    - VM is powered off or deallocated
+    - Network connectivity to AMA endpoints is blocked
+    - AMA service is stopped or misconfigured
+    - No Data Collection Rule (DCR) is associated with the machine
+
+    The **merged view** at the bottom of the workbook joins this with Azure Resource Graph (`hasAMAExt`, `amaExtVersion`, `amaExtState`) and is the authoritative source for the actual extension installation state.
 
 *   **Windows and Linux Support**
     This workbook supports both **Windows** and **Linux** endpoints.
